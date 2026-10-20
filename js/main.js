@@ -96,13 +96,19 @@ window.addEventListener('DOMContentLoaded', function() {
 
 // =========================================================================
 // 🔒 [보안 설정] Cloudflare Workers 중계 엔드포인트
+// 💡 만약 워커를 아직 만들지 않으셨다면 ""(빈값)으로 두셔도 직접 안전 전송됩니다.
 // =========================================================================
 const PROXY_ENDPOINT = "https://honorsville-jeon-webhook.mohanni1006.workers.dev";
 
+// Base64 분할 난독화 안전 복원 함수
 function getDecodedEndpoint(parts) {
   try {
-    return atob(parts.join(''));
+    if (Array.isArray(parts)) {
+      return parts.map(p => atob(p)).join('');
+    }
+    return atob(parts);
   } catch (e) {
+    console.error("웹후크 복원 실패:", e);
     return "";
   }
 }
@@ -120,11 +126,10 @@ const _sParts = [
   "dm1rdGJpbnpoeDRzMTR2c29jMWxzbWFudmo3cmdzcmE="
 ];
 
-// 7. 문자(SMS) 페이로드 생성 (문자 상담 번호: 010-7577-7738)
+// 7. 문자(SMS) 페이로드 생성 (관리자 010-7577-7738 수신)
 function buildSmsPayload(data) {
   const ADMIN_PHONE = "010-7577-7738";
   
-  // 👉 90바이트 이내로 맞춘 단문 SMS 양식
   let smsMessage = `[아너스빌] ${data.name} ${data.phone}\n방문: ${data.visitDate} ${data.visitTime}\n타입: ${data.interest}`;
   if (data.memo && data.memo !== '없음') {
     smsMessage += `\n메모: ${data.memo}`;
@@ -137,7 +142,7 @@ function buildSmsPayload(data) {
   };
 }
 
-// 8. 디스코드 및 문자 전송 처리 엔진
+// 8. 디스코드 및 문자 전송 엔진 (이중 안전장치 적용)
 async function submitReservation(event) {
   event.preventDefault();
 
@@ -199,24 +204,30 @@ async function submitReservation(event) {
   const smsPayload = buildSmsPayload(reservationData);
 
   try {
-    // (A) Cloudflare Worker 프록시 서버 연동
-    if (PROXY_ENDPOINT) {
-      const proxyRes = await fetch(PROXY_ENDPOINT, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ discordPayload, smsPayload })
-      });
+    let isSuccess = false;
 
-      if (proxyRes.ok) {
-        alert("방문 예약이 정상 접수되었습니다.\n담당자(전지윤)가 예약 일시 확인 후 신속히 안내 연락드리겠습니다.");
-        document.getElementById('consultForm').reset();
-      } else {
-        alert("상담 예약 전송 중 오류가 발생했습니다. 대표번호(1833-4795)로 문의해 주세요.");
+    // [1단계] Cloudflare Worker 프록시 연결 시도
+    if (PROXY_ENDPOINT && PROXY_ENDPOINT.trim() !== "") {
+      try {
+        const proxyRes = await fetch(PROXY_ENDPOINT, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ discordPayload, smsPayload })
+        });
+
+        if (proxyRes.ok) {
+          isSuccess = true;
+        } else {
+          console.warn("Worker 프록시 응답 실패(코드: " + proxyRes.status + "). 예비 전송 모드로 전환합니다.");
+        }
+      } catch (proxyErr) {
+        console.warn("Worker 통신 불가(미배포 또는 CORS 오류). 예비 직발송 모드로 전환합니다.", proxyErr);
       }
-    } 
-    // (B) 예비 직접 전송 모드
-    else {
-      const discordUrl = getDecodedEndpoint(_dParts[0]) + getDecodedEndpoint([_dParts[1]]) + getDecodedEndpoint([_dParts[2]]);
+    }
+
+    // [2단계] 워커 실패 시 난독화 해제 후 직접 전송 (Fallback)
+    if (!isSuccess) {
+      const discordUrl = getDecodedEndpoint(_dParts);
       const smsUrl = getDecodedEndpoint(_sParts);
 
       const [discordRes] = await Promise.all([
@@ -233,14 +244,21 @@ async function submitReservation(event) {
       ]);
 
       if (discordRes.ok || discordRes.status === 204) {
-        alert("방문 예약이 정상 접수되었습니다.\n담당자(전지윤)가 예약 일시 확인 후 신속히 안내 연락드리겠습니다.");
-        document.getElementById('consultForm').reset();
+        isSuccess = true;
       } else {
         const errText = await discordRes.text();
-        alert("접수 전송 실패 (코드: " + discordRes.status + ")\n" + errText);
+        console.error("디스코드 직접 발송 실패:", discordRes.status, errText);
       }
     }
+
+    if (isSuccess) {
+      alert("방문 예약이 정상 접수되었습니다.\n담당자(전지윤)가 예약 일시 확인 후 신속히 안내 연락드리겠습니다.");
+      document.getElementById('consultForm').reset();
+    } else {
+      alert("상담 예약 전송 중 일시적인 오류가 발생했습니다. 대표번호(1833-4795)로 문의해 주세요.");
+    }
   } catch (err) {
+    console.error("전송 처리 최종 오류:", err);
     alert("네트워크 통신 오류가 발생했습니다.\n대표번호(1833-4795)로 연락 주시면 즉시 안내해 드리겠습니다.");
   } finally {
     submitBtn.disabled = false;
@@ -259,7 +277,7 @@ function toggleFloatingMenu(forceState) {
   }
 }
 
-// 10. 다이렉트 문자(SMS) 연결 (010-7577-7738 번호로 발송)
+// 10. 다이렉트 문자(SMS) 연결
 function openDirectSms() {
   const ADMIN_PHONE = "010-7577-7738";
   const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
