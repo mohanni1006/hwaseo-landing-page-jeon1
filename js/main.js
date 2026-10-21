@@ -65,7 +65,7 @@ if (phoneInput) {
   });
 }
 
-// 5. 팝업창 제어
+// 5. 팝업창 제어 (1차 혜택 팝업 -> 2차 유튜브 영상 팝업 순차 진행)
 function openPopup() {
   const modal = document.getElementById('popupModal');
   if (modal) {
@@ -73,30 +73,65 @@ function openPopup() {
   }
 }
 
+// 1차 팝업 닫기 누르면 -> 2차 유튜브 영상 팝업 열기
 function closePopup() {
   const modal = document.getElementById('popupModal');
   if (modal) {
     modal.style.display = 'none';
   }
+  openVideoPopup();
 }
 
-// 6. 페이지 로드 초기화 (과거 날짜 선택 제한 포함)
+// 2차 유튜브 팝업 열기 및 자동재생 시작
+function openVideoPopup() {
+  const videoModal = document.getElementById('videoPopupModal');
+  const iframe = document.getElementById('popupYoutubeIframe');
+  if (videoModal) {
+    videoModal.style.display = 'flex';
+  }
+  if (iframe) {
+    iframe.src = "https://www.youtube.com/embed/RyQxWm-hc60?autoplay=1&mute=1&loop=1&playlist=RyQxWm-hc60&playsinline=1&controls=1&rel=0";
+  }
+}
+
+// 2차 유튜브 팝업 닫기 누르면 -> 동영상 정지 및 메인 화면 노출
+function closeVideoPopup() {
+  const videoModal = document.getElementById('videoPopupModal');
+  const iframe = document.getElementById('popupYoutubeIframe');
+  if (videoModal) {
+    videoModal.style.display = 'none';
+  }
+  if (iframe) {
+    iframe.src = "";
+  }
+}
+
+// 6. 페이지 로드 초기화 (과거 날짜 선택 제한 & 칸 전체 클릭 시 달력 열기)
 window.addEventListener('DOMContentLoaded', function() {
   openPopup();
   showSlide(0);
   startSlideInterval();
 
-  // 방문 예약 일자: 오늘 이전 과거 날짜 비활성화
+  // 방문 예약 일자 설정
   const dateInput = document.getElementById('formVisitDate');
   if (dateInput) {
     const today = new Date().toISOString().split('T')[0];
     dateInput.min = today;
+
+    dateInput.addEventListener('click', function() {
+      if (typeof this.showPicker === 'function') {
+        try {
+          this.showPicker();
+        } catch (e) {
+          // 브라우저 포커스 정책 예외 안전 처리
+        }
+      }
+    });
   }
 });
 
 // =========================================================================
 // 🔒 [보안 설정] Cloudflare Workers 중계 엔드포인트
-// 💡 만약 워커를 아직 만들지 않으셨다면 ""(빈값)으로 두셔도 직접 안전 전송됩니다.
 // =========================================================================
 const PROXY_ENDPOINT = "https://honorsville-jeon-webhook.mohanni1006.workers.dev";
 
@@ -113,20 +148,20 @@ function getDecodedEndpoint(parts) {
   }
 }
 
-// 비상용 난독화 디스코드 웹후크
+// 예비용 난독화 디스코드 웹후크 (프록시 장애 시 자동 전환용)
 const _dParts = [
   "aHR0cHM6Ly9kaXNjb3JkLmNvbS9hcGkvd2ViaG9va3Mv",
   "MTU2MjAwOTEzMjIxMzYwNDM1My8=",
   "eFBtM0dodm5vQ1ZzUmN1UXVVQTQ3R3pmMHdnM011ZzBsa2czN0RDcHY5eFJ4X24xcEl4bE0ySzdCZjZUQjJTeHNmRS0="
 ];
 
-// 비상용 난독화 문자 웹후크
+// 예비용 난독화 문자 웹후크 (프록시 장애 시 자동 전환용)
 const _sParts = [
   "aHR0cHM6Ly9ob29rLnVzMi5tYWtlLmNvbS8=",
   "dm1rdGJpbnpoeDRzMTR2c29jMWxzbWFudmo3cmdzcmE="
 ];
 
-// 7. 문자(SMS) 페이로드 생성 (관리자 010-7577-7738 수신)
+// 7. 문자(SMS) 페이로드 생성 (담당 관리자: 010-7577-7738)
 function buildSmsPayload(data) {
   const ADMIN_PHONE = "010-7577-7738";
   
@@ -142,7 +177,7 @@ function buildSmsPayload(data) {
   };
 }
 
-// 8. 디스코드 및 문자 전송 엔진 (이중 안전장치 적용)
+// 8. 디스코드 및 문자 전송 처리 엔진 (이중 안전장치 적용)
 async function submitReservation(event) {
   event.preventDefault();
 
@@ -206,7 +241,7 @@ async function submitReservation(event) {
   try {
     let isSuccess = false;
 
-    // [1단계] Cloudflare Worker 프록시 연결 시도
+    // [1단계] Cloudflare Workers 프록시 전송 시도
     if (PROXY_ENDPOINT && PROXY_ENDPOINT.trim() !== "") {
       try {
         const proxyRes = await fetch(PROXY_ENDPOINT, {
@@ -214,18 +249,17 @@ async function submitReservation(event) {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ discordPayload, smsPayload })
         });
-
         if (proxyRes.ok) {
           isSuccess = true;
         } else {
-          console.warn("Worker 프록시 응답 실패(코드: " + proxyRes.status + "). 예비 전송 모드로 전환합니다.");
+          console.warn("Worker 프록시 응답 실패(상태코드: " + proxyRes.status + "). 예비 직발송 모드로 전환합니다.");
         }
       } catch (proxyErr) {
-        console.warn("Worker 통신 불가(미배포 또는 CORS 오류). 예비 직발송 모드로 전환합니다.", proxyErr);
+        console.warn("Worker 프록시 연결 지연/오류로 예비 직발송 모드로 전환합니다.", proxyErr);
       }
     }
 
-    // [2단계] 워커 실패 시 난독화 해제 후 직접 전송 (Fallback)
+    // [2단계] 워커 응답 실패 시 자동 Fallback: 난독화 해제 후 직접 전송
     if (!isSuccess) {
       const discordUrl = getDecodedEndpoint(_dParts);
       const smsUrl = getDecodedEndpoint(_sParts);
@@ -277,7 +311,7 @@ function toggleFloatingMenu(forceState) {
   }
 }
 
-// 10. 다이렉트 문자(SMS) 연결
+// 10. 다이렉트 문자(SMS) 연결 (010-7577-7738 번호로 발송)
 function openDirectSms() {
   const ADMIN_PHONE = "010-7577-7738";
   const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
