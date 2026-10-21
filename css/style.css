@@ -572,13 +572,15 @@ header {
   color: #fff;
 }
 
-/* 달력(date) 인풋 다크모드 및 아이콘 보정 */
+/* 달력(date) 인풋 다크모드 및 칸 전체 클릭 커서 보정 */
 input[type="date"].form-control {
   color-scheme: dark;
+  cursor: pointer;
 }
 input[type="date"].form-control::-webkit-calendar-picker-indicator {
   filter: invert(0.85);
   cursor: pointer;
+  padding: 4px;
 }
 
 textarea.form-control {
@@ -709,7 +711,6 @@ footer {
   align-items: flex-end;
 }
 
-/* 50% 확대된 메인 상담예약 원형 버튼 (78px) */
 .btn-main-reserve {
   width: 78px;
   height: 78px;
@@ -732,7 +733,6 @@ footer {
   border-color: var(--gold-light);
 }
 
-/* 글씨 깜빡임 애니메이션 (2줄 배치) */
 .reserve-blink-text {
   font-size: 15px;
   font-weight: 900;
@@ -753,7 +753,6 @@ footer {
   }
 }
 
-/* 위로 나오는 서브 버튼 리스트 */
 .floating-sub-menu {
   display: flex;
   flex-direction: column;
@@ -767,7 +766,6 @@ footer {
   transition: opacity 0.28s ease, transform 0.28s cubic-bezier(0.175, 0.885, 0.32, 1.275), visibility 0.28s ease;
 }
 
-/* 열린 상태 */
 .floating-nav-container.open .floating-sub-menu {
   opacity: 1;
   visibility: visible;
@@ -775,7 +773,6 @@ footer {
   transform: translateY(0) scale(1);
 }
 
-/* 개별 서브 아이템 (라벨 + 원형 버튼) */
 .floating-sub-item {
   display: flex;
   align-items: center;
@@ -785,7 +782,6 @@ footer {
   -webkit-tap-highlight-color: transparent;
 }
 
-/* 원 왼쪽 문구 (고급스러운 골드 색상 박스) */
 .sub-item-label {
   background: linear-gradient(135deg, #e5c98d 0%, #c5a059 50%, #9a7632 100%);
   color: #0b0e14;
@@ -808,7 +804,6 @@ footer {
   color: #000;
 }
 
-/* 작은 동그란 원형 버튼 */
 .sub-item-circle {
   width: 48px;
   height: 48px;
@@ -939,12 +934,12 @@ footer {
 }
 
 /* -----------------------------------------------------------
-   13. Popup Modal
+   13. Popup Modal (1차 혜택 팝업 & 2차 동영상 팝업)
 ----------------------------------------------------------- */
 .popup-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.85);
+  background: rgba(0, 0, 0, 0.88);
   z-index: 10000;
   display: flex;
   align-items: center;
@@ -960,6 +955,26 @@ footer {
   overflow: hidden;
   box-shadow: 0 20px 50px rgba(0,0,0,0.9);
   position: relative;
+}
+/* 2차 동영상 팝업 전용 크기 & 스타일 */
+.popup-box.video-popup-box {
+  max-width: 680px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.95), 0 0 30px rgba(197, 160, 89, 0.25);
+}
+.popup-video-wrap {
+  position: relative;
+  width: 100%;
+  padding-bottom: 56.25%; /* 16:9 반응형 비율 */
+  height: 0;
+  background: #000;
+}
+.popup-video-wrap iframe {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  border: none;
 }
 .popup-box img {
   width: 100%;
@@ -1019,6 +1034,13 @@ footer {
 @media (max-width: 768px) {
   body {
     padding-bottom: 115px;
+  }
+  .popup-overlay {
+    padding: 16px;
+  }
+  .popup-box.video-popup-box {
+    max-width: 100%;
+    border-radius: 12px;
   }
   #hero {
     padding: 28px 12px 32px;
